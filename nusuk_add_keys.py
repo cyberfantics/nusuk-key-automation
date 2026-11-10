@@ -46,6 +46,57 @@ import argparse
 import subprocess
 import xml.etree.ElementTree as ET
 
+# ---- developer banner (colorama, optional) ------------------------------
+# colorama gives the startup banner its colours on Windows. If it is not
+# installed the banner still prints, just without colours.
+try:
+    from colorama import init as _colorama_init, Fore, Style
+    _colorama_init(autoreset=True)
+    _COLOR = True
+except ImportError:
+    _COLOR = False
+
+    class _NoColor:
+        def __getattr__(self, name):
+            return ""
+
+    Fore = Style = _NoColor()
+
+
+def _paint(text, color=""):
+    return f"{color}{text}" if _COLOR else text
+
+
+def print_banner():
+    """Show the tool title and the developer's links, in colour when possible."""
+    bar = "=" * 55
+    print(_paint(bar, Fore.CYAN + Style.BRIGHT))
+    print(_paint("  NUSUK KEY AUTOMATION", Fore.CYAN + Style.BRIGHT))
+    print(_paint("  by Mansoor Bukhari  •  CyberFantics", Fore.GREEN + Style.BRIGHT))
+    print(_paint("  Python & Flutter Developer | AI Automation Engineer", Fore.YELLOW))
+    print(_paint("-" * 55, Fore.CYAN))
+    print(_paint("  GitHub:    ", Fore.YELLOW) + _paint("github.com/cyberfantics", Fore.WHITE + Style.BRIGHT))
+    print(_paint("  LinkedIn:  ", Fore.YELLOW) + _paint("linkedin.com/in/mansoor-bukhari", Fore.WHITE + Style.BRIGHT))
+    print(_paint("  Instagram: ", Fore.YELLOW) + _paint("instagram.com/CyberFantics", Fore.WHITE + Style.BRIGHT))
+    print(_paint("  YouTube:   ", Fore.YELLOW) + _paint("youtube.com/@CyberFantics", Fore.WHITE + Style.BRIGHT))
+    print(_paint(bar, Fore.CYAN + Style.BRIGHT))
+
+
+def _app_dir():
+    """Folder holding the running exe (frozen) or this .py file."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def _adb_cmd():
+    """Prefer adb.exe next to the exe/script (release zip), else PATH."""
+    bundled = os.path.join(_app_dir(), "adb.exe" if os.name == "nt" else "adb")
+    if os.path.isfile(bundled):
+        return bundled
+    return "adb"
+
+
 PACKAGE_NAME = "com.moh.nusukapp"
 CODE_RE = re.compile(r"(NG-[A-Za-z0-9_-]+)")
 
@@ -75,7 +126,7 @@ class UINode:
 
 def adb(*args, timeout=DUMP_TIMEOUT):
     """Run one adb command (no shell) and return stdout string."""
-    cmd = ["adb"]
+    cmd = [_adb_cmd()]
     if DEVICE_ID:
         cmd += ["-s", DEVICE_ID]
     cmd += list(args)
@@ -435,6 +486,11 @@ def main():
 
     filepath = args.keys_file
     if not os.path.exists(filepath):
+        # Running the exe from another folder: look next to the exe/script.
+        alt = os.path.join(_app_dir(), os.path.basename(filepath))
+        if os.path.exists(alt):
+            filepath = alt
+    if not os.path.exists(filepath):
         print(f"❌ Error: Keys file '{filepath}' not found.")
         print(f"   Please create '{filepath}' with one key per line.")
         sys.exit(1)
@@ -455,9 +511,7 @@ def main():
     if args.limit:
         todo = todo[: args.limit]
 
-    print("=" * 55)
-    print("   NUSUK CHALLENGE AUTOMATED KEY CLAIM SCRIPT")
-    print("=" * 55)
+    print_banner()
     print(f"📋 Loaded {len(codes)} unique key(s) from '{filepath}'.")
     if done and not args.fresh:
         print(f"♻️  Resuming: {len(done)} already finished, {len(todo)} remaining.")
