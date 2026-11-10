@@ -26,13 +26,23 @@ will already be used or invalid. The script just skips those and moves on.
 
 ## What you need
 
-- Python 3.8 or newer
-- ADB (Android platform-tools) on your PATH
 - An Android phone with USB debugging turned on, Nusuk app installed and
   logged in
 - A USB cable
+- Either the Windows `.exe` from Releases (no Python needed, ADB is included
+  in the zip) or, to run the script yourself, Python 3.8 or newer and ADB
+  (Android platform-tools) on your PATH. Optional: `pip install colorama`
+  for a coloured startup banner — the script works fine without it.
 
 ## Running it
+
+**Easiest way, Windows:** download `nusuk-key-automation-windows.zip` from
+the [Releases page](https://github.com/cyberfantics/nusuk-key-automation/releases),
+unzip it anywhere, plug in your phone, and double-click `run_add_keys.bat`.
+No Python to install. Windows may show a SmartScreen warning because the
+exe is not signed — click "More info", then "Run anyway".
+
+**From source:**
 
 ```bash
 git clone https://github.com/cyberfantics/nusuk-key-automation.git
@@ -64,7 +74,9 @@ python nusuk_add_keys.py my-codes.txt           # use a different file
 | --- | --- |
 | `nusuk_add_keys.py` | The script. Python, ADB and UI Automator. |
 | `keys.txt` | The codes. A growing list, new codes added all the time. |
-| `run_add_keys.bat` | Double-click runner for Windows. |
+| `run_add_keys.bat` | Double-click runner for Windows. Runs the `.exe` if it is there, Python otherwise. |
+| `make_icon.py` | Draws the key icon (`icon.ico` / `icon.png`) used for the `.exe` at build time. |
+| `.github/workflows/build-exe.yml` | Builds the Windows `.exe` on every release. |
 
 ## One thing to know
 
