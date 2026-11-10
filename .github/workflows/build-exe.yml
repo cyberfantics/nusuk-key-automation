@@ -1,0 +1,71 @@
+name: Build Windows exe
+
+# Builds nusuk_add_keys.exe with PyInstaller on a Windows runner and
+# attaches a ready-to-run zip to the GitHub Release.
+# Runs when a version tag like v1.0.0 is pushed, or manually from Actions.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyInstaller, colorama and Pillow
+        run: pip install pyinstaller colorama pillow
+
+      - name: Check the keys file
+        run: python nusuk_add_keys.py keys.txt --dry-run
+
+      - name: Generate exe icon
+        run: python make_icon.py
+
+      - name: Download Android platform-tools (adb)
+        shell: powershell
+        run: |
+          Invoke-WebRequest -Uri https://dl.google.com/android/repository/platform-tools-latest-windows.zip -OutFile platform-tools.zip
+          Expand-Archive platform-tools.zip -DestinationPath .
+
+      - name: Build exe
+        run: pyinstaller --onefile --console --name nusuk_add_keys --icon icon.ico --hidden-import=colorama nusuk_add_keys.py
+
+      - name: Stage release files
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path release
+          Copy-Item dist\nusuk_add_keys.exe release\
+          Copy-Item platform-tools\adb.exe release\
+          Copy-Item platform-tools\AdbWinApi.dll release\
+          Copy-Item platform-tools\AdbWinUsbApi.dll release\
+          Copy-Item keys.txt release\
+          Copy-Item run_add_keys.bat release\
+
+      - name: Zip release
+        shell: powershell
+        run: Compress-Archive -Path release\* -DestinationPath nusuk-key-automation-windows.zip
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: nusuk-key-automation-windows.zip
+          generate_release_notes: true
+
+      - name: Upload build artifact (manual runs)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nusuk-key-automation-windows
+          path: nusuk-key-automation-windows.zip
