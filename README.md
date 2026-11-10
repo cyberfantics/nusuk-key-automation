@@ -63,7 +63,7 @@ python nusuk_add_keys.py my-codes.txt           # use a different file
 | File | What it is |
 | --- | --- |
 | `nusuk_add_keys.py` | The script. Python, ADB and UI Automator. |
-| `keys.txt` | The codes. Around 2,900 to start with, one per line. |
+| `keys.txt` | The codes. A growing list, new codes added all the time. |
 | `run_add_keys.bat` | Double-click runner for Windows. |
 
 ## One thing to know
