@@ -198,14 +198,22 @@ class UINode:
 
 
 def adb(*args, timeout=DUMP_TIMEOUT):
-    """Run one adb command (no shell) and return stdout string."""
+    """Run one adb command (no shell) and return stdout string.
+
+    The phone's UI dump is UTF-8 (Arabic text, etc.), but on Windows
+    text=True alone decodes with the locale encoding (cp1252) — one byte
+    it cannot map kills the reader thread and leaves stdout as None.
+    So decode as UTF-8 with replacement, and never trust stdout to exist.
+    """
     cmd = [_adb_cmd()]
     if DEVICE_ID:
         cmd += ["-s", DEVICE_ID]
     cmd += list(args)
     try:
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        return res.stdout.strip()
+        res = subprocess.run(cmd, capture_output=True, text=True,
+                             encoding="utf-8", errors="replace",
+                             timeout=timeout)
+        return (res.stdout or "").strip()
     except subprocess.TimeoutExpired:
         return ""
     except FileNotFoundError:
