@@ -23,6 +23,10 @@ Speed notes (vs the first version):
     fail with ERROR / UNKNOWN stay in the file for retry.
   * Taps use the real on-screen coordinates of the button found in the UI
     dump instead of hardcoded pixels, so fewer taps miss and trigger recovery.
+  * Output: by default only one live status line updates in place, so the
+    startup banner stays visible for the whole run; use --verbose to print
+    every step per code. If the keys file is missing, the script asks for
+    its path instead of quitting.
 
 What cannot be made faster: the phone UI itself. Each code still needs a UI
 dump, a tap, and the Nusuk server's answer. Expect roughly 6-9 seconds per
@@ -67,8 +71,77 @@ def _paint(text, color=""):
     return f"{color}{text}" if _COLOR else text
 
 
+def _set_console_title():
+    """Put the tool name in the console window's title bar (Windows only).
+
+    The title bar is the one part of a console window that never scrolls
+    away, so the tool stays identified no matter how many codes run.
+    """
+    if os.name != "nt":
+        return
+    try:
+        os.system("title NUSUK KEY AUTOMATION - by Mansoor Bukhari - CyberFantics")
+    except Exception:
+        pass
+
+
+_VERBOSE = False
+
+
+def _say(text):
+    """Print routine chatter — hidden in the default quiet mode."""
+    if _VERBOSE:
+        print(text)
+
+
+def _status_line(idx, total, code, status, counts, avg, eta):
+    """One live status line, rewritten in place with a carriage return.
+
+    The run prints (almost) nothing else while codes are processed, so
+    the startup banner stays on screen above it instead of scrolling
+    away after a few dozen codes. Padded with spaces so a shorter line
+    overwrites a longer previous one; no ANSI codes, so it works in any
+    console, with or without colorama.
+    """
+    icons = {"SUCCESS": "✅", "ALREADY_USED": "↩️", "INVALID": "❌",
+             "ERROR": "⚠️", "UNKNOWN": "❓"}
+    eta_min = int(eta / 60)
+    eta_str = f"{eta_min // 60}h {eta_min % 60:02d}m" if eta_min >= 60 else f"{eta_min}m"
+    line = (f"[{idx}/{total}] {code} → {icons.get(status, '•')} {status} | "
+            f"✅ {counts.get('SUCCESS', 0)} • used {counts.get('ALREADY_USED', 0)} • "
+            f"invalid {counts.get('INVALID', 0)} • err "
+            f"{counts.get('ERROR', 0) + counts.get('UNKNOWN', 0)} | "
+            f"avg {avg:.1f}s • ETA {eta_str}")
+    return "\r" + line.ljust(120)
+
+
+def _ask_keys_path(missing):
+    """Ask the user to type the keys file path (up to 3 tries).
+
+    Returns the path, or None if the user quits or input is unavailable.
+    """
+    print(f"❌ Keys file '{missing}' not found.")
+    print("   Tip: you can drag the keys file into this window to paste its path.")
+    for _ in range(3):
+        try:
+            answer = input("   Path to keys file (press Enter to quit): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n   No input — exiting.")
+            return None
+        answer = answer.strip('"').strip("'")
+        if not answer:
+            return None
+        answer = os.path.expanduser(answer)
+        if os.path.isfile(answer):
+            return answer
+        print(f"   ❌ Not found: {answer}")
+    print("   Too many tries — exiting.")
+    return None
+
+
 def print_banner():
     """Show the tool title and the developer's links, in colour when possible."""
+    _set_console_title()
     bar = "=" * 55
     print(_paint(bar, Fore.CYAN + Style.BRIGHT))
     print(_paint("  NUSUK KEY AUTOMATION", Fore.CYAN + Style.BRIGHT))
@@ -197,7 +270,7 @@ def dump_nodes():
             nodes.append(UINode(t, d, c, b, cx, cy))
         return nodes
     except Exception as e:
-        print(f"[!] Error parsing UI: {e}")
+        _say(f"[!] Error parsing UI: {e}")
         return []
 
 
@@ -257,7 +330,7 @@ def ensure_on_keys_screen():
         # Congratulations screen -> back to the input screen
         add_another = find_node(nodes, text_match="Add another code to get a key")
         if add_another is not None:
-            print("🔄 On congratulations screen, tapping 'Add another code to get a key'...")
+            _say("🔄 On congratulations screen, tapping 'Add another code to get a key'...")
             tap_node(add_another, (360, 1510))
             time.sleep(NAV_SLEEP)
             continue
@@ -265,7 +338,7 @@ def ensure_on_keys_screen():
         # Doors screen / challenge tab -> open the Keys tab
         keys_tab = find_node(nodes, desc_match="Keys") or find_node(nodes, text_match="Keys")
         if keys_tab is not None and keys_tab.cy > 1300:
-            print("🔑 Tapping 'Keys' tab...")
+            _say("🔑 Tapping 'Keys' tab...")
             tap_node(keys_tab, (360, 1450))
             time.sleep(NAV_SLEEP)
             continue
@@ -273,7 +346,7 @@ def ensure_on_keys_screen():
         # Home screen -> open the challenge
         start_ch = find_node(nodes, text_match="Start the challenge")
         if start_ch is not None:
-            print("🚪 Tapping 'Start the challenge' banner...")
+            _say("🚪 Tapping 'Start the challenge' banner...")
             tap_node(start_ch, (360, 1000))
             time.sleep(NAV_SLEEP + 1)
             continue
@@ -281,7 +354,7 @@ def ensure_on_keys_screen():
         # Door prompt popup -> close it
         close_btn = find_node(nodes, text_match="Close")
         if close_btn is not None:
-            print("❌ Closing door prompt dialog...")
+            _say("❌ Closing door prompt dialog...")
             tap_node(close_btn, (360, 1000))
             time.sleep(1)
             continue
@@ -289,7 +362,7 @@ def ensure_on_keys_screen():
         # App not in foreground -> launch it
         focus = adb_shell("dumpsys window | grep mCurrentFocus")
         if PACKAGE_NAME not in focus:
-            print(f"🚀 Launching Nusuk app ({PACKAGE_NAME})...")
+            _say(f"🚀 Launching Nusuk app ({PACKAGE_NAME})...")
             adb_shell(f"monkey -p {PACKAGE_NAME} -c android.intent.category.LAUNCHER 1")
             time.sleep(4)
             continue
@@ -337,7 +410,7 @@ def claim_key(code, on_input):
     if m:
         code = m.group(1)
 
-    print(f"\n👉 Processing code: {code}")
+    _say(f"\n👉 Processing code: {code}")
 
     # 1. Make sure we are on the input screen — cheap check if we already
     #    believe we are there (one dump), full recovery only if we are lost.
@@ -349,7 +422,7 @@ def claim_key(code, on_input):
             nodes = None
     if not on_input:
         if not ensure_on_keys_screen():
-            print("⚠️ Warning: Could not detect input screen, attempting blindly...")
+            _say("⚠️ Warning: Could not detect input screen, attempting blindly...")
         nodes = dump_nodes()
 
     # 2. Clear the input box and type the code (2 adb calls total).
@@ -376,20 +449,20 @@ def claim_key(code, on_input):
             break
 
     if result is None:
-        print("ℹ️ Finished submission (no clear result).")
+        _say("ℹ️ Finished submission (no clear result).")
         clear_edit_text()
         return "UNKNOWN", "Finished submission", False
 
     status, msg = result
     if status == "SUCCESS":
-        print(f"🎉 SUCCESS! Key added successfully!{msg[len('Key added!'):]}")
+        _say(f"🎉 SUCCESS! Key added successfully!{msg[len('Key added!'):]}")
         # Back to the input screen right away, at the button's real position.
         add_another = find_node(res_nodes, text_match="Add another code to get a key")
         tap_node(add_another, (360, 1510))
         time.sleep(1)
         return status, msg, True
 
-    print(f"⚠️ FAILED: {msg}" if status != "INVALID" else f"❌ FAILED: {msg}")
+    _say(f"⚠️ FAILED: {msg}" if status != "INVALID" else f"❌ FAILED: {msg}")
     clear_edit_text()
     # After a rejection the input screen is still showing.
     return status, msg, True
@@ -479,7 +552,12 @@ def main():
                         help="validate the keys file only, do not touch the phone")
     parser.add_argument("--device", default=None,
                         help="adb device id when more than one phone is connected")
+    parser.add_argument("--verbose", action="store_true",
+                        help="print every step per code (default: one live status line)")
     args = parser.parse_args()
+
+    global _VERBOSE
+    _VERBOSE = args.verbose
 
     global DEVICE_ID
     DEVICE_ID = args.device
@@ -491,9 +569,9 @@ def main():
         if os.path.exists(alt):
             filepath = alt
     if not os.path.exists(filepath):
-        print(f"❌ Error: Keys file '{filepath}' not found.")
-        print(f"   Please create '{filepath}' with one key per line.")
-        sys.exit(1)
+        filepath = _ask_keys_path(filepath)
+        if filepath is None:
+            sys.exit(0)
 
     codes, invalid, dupes = load_codes(filepath)
     if invalid:
@@ -526,12 +604,19 @@ def main():
 
     results = []
     removed = 0
+    counts = {}
     start = time.time()
     for idx, code in enumerate(todo, 1):
         elapsed = time.time() - start
         avg = elapsed / idx if idx else 0
         eta = avg * (len(todo) - idx)
-        print(f"\n--- [{idx}/{len(todo)}] (avg {avg:.1f}s/code, ETA ~{eta/60:.0f} min) ---")
+        if _VERBOSE:
+            print(f"\n--- [{idx}/{len(todo)}] (avg {avg:.1f}s/code, ETA ~{eta/60:.0f} min) ---")
+            if idx % 50 == 0:
+                # The startup banner scrolls off after a few dozen codes, so
+                # re-show a short one-liner regularly to keep the tool named.
+                print(_paint("— NUSUK KEY AUTOMATION • by Mansoor Bukhari • CyberFantics —",
+                             Fore.CYAN + Style.BRIGHT))
         status, msg, on_input = claim_key(code, on_input)
         results.append((code, status, msg))
         progress[code] = status
@@ -540,9 +625,20 @@ def main():
             left = prune_keys_file(filepath, code)
             if left is not None:
                 removed += 1
-                print(f"🗑️ Removed {code} from {filepath} ({left} left)")
+                if _VERBOSE:
+                    print(f"🗑️ Removed {code} from {filepath} ({left} left)")
+        if not _VERBOSE:
+            # Quiet mode: one live status line, rewritten in place, so the
+            # banner above it never scrolls away. Errors still get a line
+            # of their own so they stay visible.
+            counts[status] = counts.get(status, 0) + 1
+            if status in ("ERROR", "UNKNOWN"):
+                print(f"⚠️ {status}: {code} — {msg}")
+            print(_status_line(idx, len(todo), code, status, counts, avg, eta),
+                  end="", flush=True)
 
-    print("\n" + "=" * 55)
+    print()
+    print_banner()
     print("                 SUMMARY REPORT")
     print("=" * 55)
     total_time = time.time() - start

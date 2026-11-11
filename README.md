@@ -65,8 +65,11 @@ python nusuk_add_keys.py keys.txt --limit 20    # only the first 20 codes, good 
 python nusuk_add_keys.py keys.txt --fresh       # ignore saved progress, start from the top
 python nusuk_add_keys.py keys.txt --dry-run     # check the keys file, don't touch the phone
 python nusuk_add_keys.py keys.txt --device ABC  # pick one phone when two are plugged in
+python nusuk_add_keys.py keys.txt --verbose     # print every step per code (default is one live status line)
 python nusuk_add_keys.py my-codes.txt           # use a different file
 ```
+
+While it runs, the screen shows one live status line that updates in place (current code, counts, average speed, ETA), so the banner at the top stays visible. The full result for every code is still printed in the summary at the end, and saved in `keys.txt.progress.json`.
 
 ## What is in here
 
@@ -127,6 +130,7 @@ so run it in sessions and let it pick up where it stopped.
 | Problem | What to do |
 | --- | --- |
 | No Android device connected | Check the cable, turn on USB debugging, accept the prompt on the phone, run `adb devices`. |
+| Keys file not found | The script asks for the path — type it in, or drag the file into the window. Press Enter with nothing typed to quit. |
 | `adb` is not recognized | Install platform-tools and add it to PATH, or drop `adb.exe` in this folder. |
 | It cannot find the input screen | Open the Nusuk app to Challenge, Keys yourself, then run it again. |
 | Taps land in the wrong place | The script uses the button's real position when it can find it. If your screen is very different, open the Keys screen first and let it start from there. |
